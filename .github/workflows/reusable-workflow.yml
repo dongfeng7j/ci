@@ -4,6 +4,14 @@ name: Reusable Workflow
 on:
   workflow_call:
 
+env:
+  XX_BRANCH_NAME_PREFIX: 'branch_trains_search_keyword_response'
+  XX_GITHUB_OWNER: ${{ secrets.XX_GITHUB_OWNER }}
+  XX_CI_GH_PAT: ${{ secrets.XX_CI_GH_PAT }}
+  XX_DEBUG: ${{ vars.XX_DEBUG }}
+  XX_GITHUB_DATA_REPO: ${{ vars.XX_GITHUB_DATA_REPO }}
+  XX_GITHUB_PROGRAM_REPO: ${{ vars.XX_GITHUB_PROGRAM_REPO }}
+
 jobs:
   generate_matrix:
     runs-on: ubuntu-latest
