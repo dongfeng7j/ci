@@ -21,6 +21,7 @@ jobs:
         run: |
           echo "${{ format('<h1>Parameters</h1><p>{0}</p>', tojson(inputs)) }}" > "$GITHUB_STEP_SUMMARY"
           echo "==${XX_GITHUB_OWNER}=="
+          echo "==${{ secrets.XX_GITHUB_OWNER }}=="
           echo "==${XX_GITHUB_DATA_REPO}=="
       - name: Checkout code
         uses: actions/checkout@v4
