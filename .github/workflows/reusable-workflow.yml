@@ -1,0 +1,65 @@
+# .github/workflows/reusable-workflow.yml
+name: Reusable Workflow
+
+on:
+  workflow_call:
+
+jobs:
+  generate_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Display parameters
+        shell: bash
+        run: echo "${{ format('<h1>Parameters</h1><p>{0}</p>', tojson(inputs)) }}" > "$GITHUB_STEP_SUMMARY"
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Setup program repo
+        run: |
+          set -ex
+
+          # Clone program repository
+          git clone https://$XX_CI_GH_PAT@github.com/$XX_GITHUB_OWNER/$XX_GITHUB_PROGRAM_REPO.git
+
+          # Install dependencies
+          cd $XX_GITHUB_PROGRAM_REPO
+          npm ci
+      - name: Generate matrix
+        id: set-matrix
+        run: |
+          set -ex
+          matrix=$(node $XX_GITHUB_PROGRAM_REPO/cli/gen_matrix.js)
+          echo "matrix=$matrix" >> $GITHUB_ENV
+      - name: Save jobs
+        run: |
+          set -ex
+
+          # cd to program repo
+          cd $XX_GITHUB_PROGRAM_REPO
+
+          # Clone data repository
+          git clone https://$XX_CI_GH_PAT@github.com/$XX_GITHUB_OWNER/$XX_GITHUB_DATA_REPO.git $XX_GITHUB_DATA_REPO
+
+          # save distributeItemsToJobs to a json file: `20240722/search_keywords_raw_json_jobs.json`
+          node cli/save_checi_raw_response.js ${{ github.event.inputs.download_date }} distributeItemsToJobs
+
+          # Navigate to the data repository
+          cd $XX_GITHUB_DATA_REPO
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Commit and push changes
+          git pull
+          git add .
+          if git commit -m "Save new data ${{ github.event.inputs.download_date }}/search_keywords_raw_json_jobs.json"; then
+            git push origin main
+          else
+            echo "No changes to commit"
+          fi
