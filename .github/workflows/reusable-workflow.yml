@@ -63,3 +63,159 @@ jobs:
           else
             echo "No changes to commit"
           fi
+
+  http_requests:
+    needs: generate_matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Define the batches, in each batch we will run 1 job with 80 keywords
+        # batch: ${{ fromJson(env.matrix).batch }}
+        # TODO need to syncup with config.js
+        # prettier-ignore
+        batch: [1,2,3,4,5,6,7,8]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Run all tasks
+        run: |
+          set -ex
+
+          # Define branch name
+          XX_BRANCH_NAME="${XX_BRANCH_NAME_PREFIX}_${{ github.event.inputs.download_date }}_${{ matrix.batch }}"
+
+          # Clone program repository
+          git clone https://$XX_CI_GH_PAT@github.com/$XX_GITHUB_OWNER/$XX_GITHUB_PROGRAM_REPO.git
+
+          # Install dependencies
+          cd $XX_GITHUB_PROGRAM_REPO
+          npm ci
+
+          # Clone data repository
+          git clone https://$XX_CI_GH_PAT@github.com/$XX_GITHUB_OWNER/$XX_GITHUB_DATA_REPO.git $XX_GITHUB_DATA_REPO
+          cd $XX_GITHUB_DATA_REPO
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Checkout or create a new branch for each batch
+          git checkout $XX_BRANCH_NAME || git checkout -b $XX_BRANCH_NAME
+          cd ..
+
+          # Download data and save raw response
+          node cli/save_checi_raw_response.js ${{ github.event.inputs.download_date }} ci ${{ matrix.batch }}
+
+          # Navigate back to the data repository
+          cd $XX_GITHUB_DATA_REPO
+
+          # Commit and push changes
+          git add .
+          if git commit -m "[batch-download-checi.yml] Save new data $XX_BRANCH_NAME"; then
+            git push origin $XX_BRANCH_NAME
+          else
+            echo "No changes to commit"
+          fi
+
+  git_merge:
+    needs: http_requests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Merge all batches sequentially
+        run: |
+          set -ex
+
+          # Clone data repository
+          git clone https://$XX_CI_GH_PAT@github.com/$XX_GITHUB_OWNER/$XX_GITHUB_DATA_REPO.git $XX_GITHUB_DATA_REPO
+
+          # Navigate to the data repository
+          cd $XX_GITHUB_DATA_REPO
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Merge each batch sequentially # TODO: make sure syncup 1~8 with config.js
+          for batch in {1..8}; do
+            remote_branch="${XX_BRANCH_NAME_PREFIX}_${{ github.event.inputs.download_date }}_$batch"
+            if git ls-remote --exit-code --heads origin "${remote_branch}"; then
+              git merge --squash "origin/${remote_branch}" || exit 1
+              git status
+            else
+              echo "Remote branch ${remote_branch} not found, skipping merge."
+            fi
+          done
+
+          # Commit changes
+          git add .
+          git commit -m "Merge all batches ${{ github.event.inputs.download_date }}/trainKeywordResponses/keyword_*.json" || echo "No changes to commit after merge"
+
+          # push changes
+          git push origin main
+      - name: Remove remote branches
+        run: |
+          set -ex
+
+          # Navigate to the data repository
+          cd $XX_GITHUB_DATA_REPO
+
+          # Remove each batch branch # TODO: make sure syncup 1~8 with config.js
+          for batch in {1..8}; do
+            remote_branch="${XX_BRANCH_NAME_PREFIX}_${{ github.event.inputs.download_date }}_$batch"
+            if git ls-remote --exit-code --heads origin "${remote_branch}"; then
+              git push origin --delete "${remote_branch}" || exit 1
+            else
+              echo "Remote branch ${remote_branch} not found, skipping delete."
+            fi
+          done
+
+  # Convert all website API search raw response files to a big CheCi<>Info map
+  convert_to_map:
+    needs: git_merge
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Run all tasks
+        run: |
+          set -ex
+
+          # Clone program repository
+          git clone https://$XX_CI_GH_PAT@github.com/$XX_GITHUB_OWNER/$XX_GITHUB_PROGRAM_REPO.git
+
+          # Install dependencies
+          cd $XX_GITHUB_PROGRAM_REPO
+          npm ci
+
+          # Clone data repository
+          git clone https://$XX_CI_GH_PAT@github.com/$XX_GITHUB_OWNER/$XX_GITHUB_DATA_REPO.git $XX_GITHUB_DATA_REPO
+
+          # Convert all website raw response files to a big CheCi<>Info map file
+          node cli/save_trains_map.js ${{ github.event.inputs.download_date }}
+
+          # Navigate back to the data repository
+          cd $XX_GITHUB_DATA_REPO
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Commit and push changes
+          git status
+          git add .
+          git commit -m "Save new data ${{ github.event.inputs.download_date }}/checiMap.json" || echo "No changes to commit after generating a big CheCi<>Info map file"
+          git push
