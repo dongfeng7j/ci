@@ -21,7 +21,7 @@ jobs:
       - name: Display parameters
         shell: bash
         run: |
-          echo "${{ format('<h1>Parameters</h1><p>{0}</p>', tojson(inputs)) }}" > "$GITHUB_STEP_SUMMARY"
+          # echo "${{ format('<h1>Parameters</h1><p>{0}</p>', tojson(inputs)) }}" > "$GITHUB_STEP_SUMMARY"
           echo "==${XX_GITHUB_OWNER}=="
           echo "==${{ secrets.XX_GITHUB_OWNER }}=="
           echo "==${XX_GITHUB_DATA_REPO}=="
